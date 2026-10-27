@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#005ead">
+  <meta name="description" content="ОМА.Собери и ОМА.Прораб — интерактивный дизайн-прототип: от первой идеи до готового ремонта.">
+  <title>ОМА — от идеи до дома</title>
+  <link rel="icon" href="assets/oma-logo.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="prototype-bar">
+    <a class="concept-label" href="#dashboard"><span class="live-dot"></span> OMA <span class="concept-divider">/</span> PRODUCT CONCEPT <span class="edition">2026</span></a>
+    <div class="preview-controls"><div class="device-toggle" aria-label="Размер экрана"><button class="selected" data-device="desktop" aria-pressed="true">Сайт</button><button data-device="mobile" aria-pressed="false">Мобильное приложение</button></div><button class="screen-map" data-action="screens">Все экраны <span>↗</span></button></div>
+  </div>
+  <div class="app-shell">
+    <div class="phone-status" aria-hidden="true"><b>9:41</b><span>●●●  ▰</span></div>
+    <header class="app-header">
+      <a class="brand" href="#dashboard" aria-label="ОМА. Главная"><img src="assets/oma-logo.png" alt="ОМА"><span class="brand-line"></span><span>от идеи<br><b>до дома</b></span></a>
+      <nav class="service-switch" aria-label="Сервисы"><a href="#variants" id="soberi-link">Собери<span>пространство мечты</span></a><a href="#foremen" id="prorab-link">Прораб<span>ремонт под контролем</span></a></nav>
+      <div class="header-right"><span class="demo-label">Демо-прототип</span><button class="icon-button notification-button" data-action="notifications" aria-label="Уведомления"><span data-icon="bell"></span><i></i></button><button class="avatar avatar-user" data-action="role" aria-label="Сменить демонстрационную роль">АК</button></div>
+    </header>
+    <div class="app-body">
+      <aside class="sidebar">
+        <button class="project-picker" data-route="dashboard"><span class="project-icon" data-icon="home"></span><span><small>МОЙ ПРОЕКТ</small><b id="project-label">Квартира на Лесной</b><em>Минск · 2 комнаты</em></span><span>⌄</span></button>
+        <nav class="side-nav" aria-label="Основная навигация" id="side-nav"></nav>
+        <div class="sidebar-bottom"><div class="mini-help"><span data-icon="message"></span><b>Рядом на каждом шаге</b><p>Поможем разобраться<br>с вашим ремонтом.</p><button data-route="support">Поддержка ОМА <span>↗</span></button></div><div class="role-control"><span class="role-dot"></span><select id="role-select" aria-label="Демонстрационная роль"><option value="client">Кабинет заказчика</option><option value="foreman">Кабинет прораба</option><option value="mediator">Посредник ОМА</option></select></div></div>
+      </aside>
+      <main class="workspace" id="workspace" tabindex="-1"></main>
+    </div>
+    <nav class="bottom-nav" aria-label="Мобильная навигация"><a href="#dashboard" data-mobile-nav="dashboard"><span data-icon="home"></span>Главная</a><a href="#studio" data-mobile-nav="studio"><span data-icon="layers"></span>Собери</a><a href="#tracking" data-mobile-nav="tracking"><span data-icon="helmet"></span>Ремонт</a><a href="#cart" data-mobile-nav="cart"><span data-icon="cart"></span>Корзина</a><button data-action="screens"><span data-icon="grid"></span>Ещё</button></nav>
+  </div>
+  <footer class="prototype-footer"><span>SPACE HACKATHON WITH OMA <span>·</span> Интерактивный дизайн-концепт</span><a href="https://deerflow.tech" target="_blank" rel="noopener noreferrer">Created By Deerflow</a><button data-action="reset">Сбросить демо</button></footer>
+  <dialog id="modal"><div id="modal-content"></div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
