@@ -1,0 +1,5 @@
+[
+  {"id":"foreman_demo_01","name":"Иван Ковалёв","specialities":["painting","wallpaper","flooring"],"region":"Minsk","availability":"с 10 ноября 2026","team_size":4,"conditions":"Работа по договору, смета до старта","verified":true,"demo":true},
+  {"id":"foreman_demo_02","name":"Павел Шевчик","specialities":["flooring","tiling"],"region":"Minsk","availability":"с 3 ноября 2026","team_size":2,"conditions":"Выезд на осмотр бесплатно","verified":true,"demo":true},
+  {"id":"foreman_demo_03","name":"Марина Ляшко","specialities":["painting","light"],"region":"Brest","availability":"по согласованию","team_size":3,"conditions":"Только отделочные работы","verified":false,"demo":true}
+]
