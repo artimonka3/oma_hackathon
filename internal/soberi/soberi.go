@@ -29,6 +29,7 @@ type RoomNeed struct {
 // PurchaseLine — агрегированная новая закупка: идентичные артикулы
 // собраны вместе с сохранением распределения по помещениям.
 type PurchaseLine struct {
+	Manual     bool     `json:"manual,omitempty"`
 	SKU        string   `json:"sku"`
 	Title      string   `json:"title"`
 	Packs      int      `json:"packs"`

@@ -307,9 +307,11 @@ function cart() {
       "Ваш комплект материалов",
       "Расчёт выполнен сервером. Можно увеличить количество; для уменьшения уточните размеры или остатки.",
     ) +
-    `<div class="grid"><div><section class="card">${(sp.new_purchase || []).map((p) => `<div class="line"><div><b>${esc(p.title)}</b><p>${money(p.price_minor)} / ${esc(catalog.find(x=>x.sku===p.sku)?.sales_unit||"уп.")}</p></div><label class="field" style="margin:0">Количество<input aria-label="Количество: ${esc(p.title)}" class="quantity" data-quantity="${p.sku}" type="number" min="${sp.required_packs[p.sku]}" max="999" value="${p.packs}"></label><b>${money(p.total_minor)}</b></div>`).join("") || "<h2>Всё необходимое уже есть</h2><p>Подтверждённые остатки полностью покрывают потребность. Новая закупка не требуется.</p>"}<div class="actions">${link("Изменить размеры", "room", true)}${link("Остатки", "leftovers", true)}</div></section><section class="card spacer"><h2>Как будете делать ремонт?</h2><p>Покупайте материалы для самостоятельной работы или передайте комплект специалисту.</p><div class="actions">${sp.total_minor ? button("Купить самостоятельно", "self") : ""}${link("Перейти в ОМА.Прораб ↗", "prorab", true)}</div></section></div>${summary()}</div>`
+    `<div class="grid"><div><section class="card">${(sp.new_purchase || []).map((p) => `<div class="line"><div><b>${esc(p.title)}</b><p>${money(p.price_minor)} / ${esc(catalog.find(x=>x.sku===p.sku)?.sales_unit||"уп.")}</p></div><label class="field" style="margin:0">Количество<input aria-label="Количество: ${esc(p.title)}" class="quantity" data-quantity="${p.sku}" type="number" min="${sp.required_packs[p.sku]}" max="999" value="${p.packs}"></label><b>${money(p.total_minor)}</b></div>`).join("") || "<h2>Всё необходимое уже есть</h2><p>Подтверждённые остатки полностью покрывают потребность. Новая закупка не требуется.</p>"}<div class="actions">${link("Добавить ещё товары", "add-products")}${link("Изменить размеры", "room", true)}${link("Остатки", "leftovers", true)}</div></section><section class="card spacer"><h2>Как будете делать ремонт?</h2><p>Покупайте материалы для самостоятельной работы или передайте комплект специалисту.</p><div class="actions">${sp.total_minor ? button("Купить самостоятельно", "self") : ""}${link("Перейти в ОМА.Прораб ↗", "prorab", true)}</div></section></div>${summary()}</div>`
   );
 }
+function addProducts(){const q=materialQuery.toLowerCase();const products=catalog.filter(p=>p.stock>0&&(!q||(p.title+" "+p.brand).toLowerCase().includes(q))).slice(0,40);return intro("Добавьте всё для ремонта","Выберите товары и укажите количество. Текущий комплект сохранится.")+`<section class="card"><label class="field">Поиск по каталогу<input id="bundle-search" type="search" placeholder="Грунтовка, кисть, ламинат…" value="${esc(materialQuery)}"></label><p class="hint">Количество дополнительных товаров задаётся вручную.</p><div id="bundle-results">${bundleResults(products)}</div><div class="actions">${link("Вернуться к комплекту","cart",true)}</div></section>`;}
+function bundleResults(products){return products.map(p=>`<div class="line"><div style="min-width:0"><b>${esc(p.title)}</b><p>${money(p.price_minor)} / ${esc(p.sales_unit||p.units_raw||"шт.")}</p></div><input type="number" min="1" max="${Math.min(999,p.stock)}" value="1" class="quantity" aria-label="Количество: ${esc(p.title)}" id="extra-${esc(p.sku)}">${button(data?.specification?.new_purchase?.some(x=>x.sku===p.sku)?"Добавить ещё":"Добавить","add-product",false,`data-sku="${esc(p.sku)}"`)}</div>`).join("")||"<p>Товары не найдены</p>";}
 function prorab() {
   if (!data?.specification)
     return empty(
@@ -502,6 +504,7 @@ const storeAnchor=document.querySelector(".shop-link");if(storeAnchor)storeAncho
     cart,
     prorab,
     review,
+    "add-products":addProducts,
     checkout: checkoutScreen,
     delivery,
     plan,
@@ -679,6 +682,9 @@ document.addEventListener("click", (event) => {
         checkout = null;
         go("cart");
         break;
+      case "add-product": {
+       const sku=el.dataset.sku,n=Number(document.getElementById("extra-"+sku).value);const old=data.specification.new_purchase.find(p=>p.sku===sku);await api(root()+"/cart",{sku,packs:n+(old?.packs||0)},"PATCH");toast("Товар добавлен в комплект");break;
+      }
       case "self":
         await api(root() + "/foreman", { foreman_id: "" }, "PUT");
         checkout = null;
@@ -917,6 +923,7 @@ window.addEventListener("hashchange", () => {
 })();
 
 document.addEventListener("input", (event) => {
+  if(event.target.id==="bundle-search"){materialQuery=event.target.value;const q=materialQuery.toLowerCase();document.getElementById("bundle-results").innerHTML=bundleResults(catalog.filter(p=>p.stock>0&&(!q||(p.title+" "+p.brand).toLowerCase().includes(q))).slice(0,40));}
   if (event.target.id === "material-search") {
     materialQuery = event.target.value;
     document.querySelector("#material-grid").innerHTML = materialGrid();

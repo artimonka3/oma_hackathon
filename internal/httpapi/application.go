@@ -200,8 +200,11 @@ func (s *Server) handleAnalysis(w http.ResponseWriter, r *http.Request, sess Ses
 	for _, line := range sp.NewPurchase {
 		p, _ := s.cfg.Oma.GetProduct(r.Context(), line.SKU)
 		kind := p.Material
-		if kind == "paint" {
+		if kind == "paint" || kind == "primer" {
 			kind = "painting"
+		}
+		if kind != "painting" && kind != "flooring" && kind != "tiling" {
+			continue
 		}
 		kinds[kind] = map[string]string{"painting": "Подготовка и покраска стен", "flooring": "Укладка напольного покрытия", "tiling": "Укладка плитки"}[kind]
 	}

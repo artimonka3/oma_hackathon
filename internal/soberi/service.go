@@ -303,6 +303,23 @@ func (s *Service) CalculateSpecification(ctx context.Context, actor project.User
 	s.mu.Lock()
 	s.specVers[pid]++
 	spec.Version = s.specVers[pid]
+	if old := s.specs[pid]; old != nil {
+		for _, line := range old.NewPurchase {
+			if line.Manual {
+				duplicate := false
+				for _, v := range spec.NewPurchase {
+					if v.SKU == line.SKU {
+						duplicate = true
+					}
+				}
+				if !duplicate {
+					spec.NewPurchase = append(spec.NewPurchase, line)
+					spec.RequiredPacks[line.SKU] = 1
+					spec.TotalMinor += line.TotalMinor
+				}
+			}
+		}
+	}
 	s.specs[pid] = spec
 	s.mu.Unlock()
 	s.events.Append(pid, "specification", "specification.calculated", string(actor),
@@ -411,7 +428,15 @@ func (s *Service) SetPacks(ctx context.Context, actor project.UserID, pid, sku s
 		}
 	}
 	if !found {
-		return apperr.NotFound("Товар отсутствует в комплекте")
+		pr, e := s.oma.GetProduct(ctx, sku)
+		if e != nil {
+			return e
+		}
+		if packs < 1 || packs > pr.Stock || pr.PriceMinor <= 0 {
+			return apperr.InvalidInput("Проверьте количество и наличие товара", nil)
+		}
+		sp.NewPurchase = append(sp.NewPurchase, PurchaseLine{SKU: sku, Title: pr.Title, Packs: packs, PriceMinor: pr.PriceMinor, TotalMinor: int64(packs) * pr.PriceMinor, Manual: true})
+		sp.RequiredPacks[sku] = 1
 	}
 	sp.TotalMinor = 0
 	for _, l := range sp.NewPurchase {
