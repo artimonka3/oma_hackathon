@@ -1,5 +1,149 @@
 [
-  {"id":"foreman_demo_01","name":"Иван Ковалёв","specialities":["painting","wallpaper","flooring"],"region":"Minsk","availability":"с 10 ноября 2026","team_size":4,"conditions":"Работа по договору, смета до старта","verified":true,"demo":true},
-  {"id":"foreman_demo_02","name":"Павел Шевчик","specialities":["flooring","tiling"],"region":"Minsk","availability":"с 3 ноября 2026","team_size":2,"conditions":"Выезд на осмотр бесплатно","verified":true,"demo":true},
-  {"id":"foreman_demo_03","name":"Марина Ляшко","specialities":["painting","light"],"region":"Brest","availability":"по согласованию","team_size":3,"conditions":"Только отделочные работы","verified":false,"demo":true}
+  {
+    "id": "foreman_demo_01",
+    "name": "Иван Петров",
+    "role": "Отделка комнат под ключ",
+    "specialities": [
+      "painting",
+      "flooring",
+      "wallpaper"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 4,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Подготовлю стены, покрашу и уложу ламинат. Работаю с небольшими квартирами и жилыми комнатами.",
+    "experience_years": 12,
+    "portrait_index": 0
+  },
+  {
+    "id": "foreman_demo_02",
+    "name": "Павел Соколов",
+    "role": "Полы и плитка",
+    "specialities": [
+      "flooring",
+      "tiling"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 2,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Ламинат, линолеум и керамическая плитка. Проверю основание, подложку и стыки покрытий.",
+    "experience_years": 9,
+    "portrait_index": 1
+  },
+  {
+    "id": "foreman_demo_03",
+    "name": "Марина Коваль",
+    "role": "Покраска и обои",
+    "specialities": [
+      "painting",
+      "wallpaper"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 2,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Аккуратная отделка стен: подготовка, покраска, обои. Помогу согласовать цвет и фактуру.",
+    "experience_years": 8,
+    "portrait_index": 2
+  },
+  {
+    "id": "foreman_demo_04",
+    "name": "Сергей Орлов",
+    "role": "Плитка и ванные комнаты",
+    "specialities": [
+      "tiling",
+      "waterproofing"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 3,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Керамика и керамогранит, раскладка плитки, подготовка основания и гидроизоляция.",
+    "experience_years": 16,
+    "portrait_index": 3
+  },
+  {
+    "id": "foreman_demo_05",
+    "name": "Елена Белова",
+    "role": "Стены и декоративная отделка",
+    "specialities": [
+      "painting",
+      "wallpaper"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 2,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Светлые интерьеры, ровные стены и аккуратные примыкания. Подберу способ нанесения под основание.",
+    "experience_years": 7,
+    "portrait_index": 4
+  },
+  {
+    "id": "foreman_demo_06",
+    "name": "Алексей Морозов",
+    "role": "Укладка напольных покрытий",
+    "specialities": [
+      "flooring",
+      "doors"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 2,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Ламинат, линолеум, плинтусы и межкомнатные пороги. Уточню геометрию и запас на подрезку.",
+    "experience_years": 6,
+    "portrait_index": 5
+  },
+  {
+    "id": "foreman_demo_07",
+    "name": "Андрей Лис",
+    "role": "Комплексный ремонт",
+    "specialities": [
+      "painting",
+      "flooring",
+      "tiling",
+      "wallpaper"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 5,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Организую весь комплект работ: стены, пол и плитка. Составлю последовательность этапов и проверю комплект.",
+    "experience_years": 18,
+    "portrait_index": 6
+  },
+  {
+    "id": "foreman_demo_08",
+    "name": "Наталья Романова",
+    "role": "Отделка жилых комнат",
+    "specialities": [
+      "painting",
+      "flooring"
+    ],
+    "region": "Минск",
+    "availability": "Сроки по договорённости",
+    "team_size": 3,
+    "conditions": "Демо-профиль. Стоимость и сроки уточняются после оценки работ.",
+    "verified": false,
+    "demo": true,
+    "bio": "Покраска и замена пола в спальнях и гостиных. Работа по этапам с фотоотчётами.",
+    "experience_years": 11,
+    "portrait_index": 7
+  }
 ]

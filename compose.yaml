@@ -1,0 +1,75 @@
+name: oma
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: oma
+      POSTGRES_USER: oma
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oma_local_dev}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-54329}:5432"
+    volumes:
+      - oma_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oma -d oma"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  shop:
+    build: .
+    entrypoint: ["/app/mockoma"]
+    init: true
+    environment:
+      MOCKOMA_ADDR: ":8090"
+      MOCKOMA_PRODUCTS_FILE: /app/oma-site/data/products.json
+      MOCKOMA_SITE_DIR: /app/oma-site/site
+      DATABASE_URL: postgres://oma:${POSTGRES_PASSWORD:-oma_local_dev}@postgres:5432/oma?sslmode=disable
+      OMA_APP_BASE_URL: http://app:8080
+      OMA_SERVICE_SECRET: ${OMA_SERVICE_SECRET:-}
+    ports:
+      - "127.0.0.1:${SHOP_PORT:-8090}:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+  app:
+    build: .
+    init: true
+    environment:
+      APP_ADDR: ":8080"
+      DATABASE_URL: postgres://oma:${POSTGRES_PASSWORD:-oma_local_dev}@postgres:5432/oma?sslmode=disable
+      MEDIA_STORAGE_PATH: /data/media
+      AI_MODE: ${AI_MODE:-demo}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-https://aihubmix.com/v1}
+      AI_MODEL: ${AI_MODEL:-glm-5.3-flash}
+      AI_TIMEOUT: ${AI_TIMEOUT:-60s}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-4096}
+      OMA_API_BASE_URL: http://shop:8090
+      DEMO_MODE: "true"
+      OMA_SERVICE_SECRET: ${OMA_SERVICE_SECRET:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8088}:8080"
+    volumes:
+      - oma_media:/data/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      shop:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+volumes:
+  oma_postgres:
+  oma_media:

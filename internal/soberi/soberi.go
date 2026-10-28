@@ -21,7 +21,9 @@ type RoomNeed struct {
 	RoomID      string  `json:"room_id"`
 	Name        string  `json:"name"`
 	WallAreaM2  float64 `json:"wall_area_m2"`
-	PaintLiters float64 `json:"paint_liters"`
+	PaintLiters float64 `json:"paint_liters,omitempty"`
+	PaintAmount float64 `json:"paint_amount,omitempty"`
+	PaintUnit   string  `json:"paint_unit,omitempty"`
 }
 
 // PurchaseLine — агрегированная новая закупка: идентичные артикулы
@@ -47,6 +49,9 @@ type Specification struct {
 	TotalMinor     int64          `json:"total_minor"`
 	Currency       string         `json:"currency"`
 	Questions      []string       `json:"questions"`
+	SourceHash     string         `json:"source_hash"`
+	UsedInventory  float64        `json:"used_inventory"`
+	RequiredPacks  map[string]int `json:"required_packs"`
 	RuleSetVersion string         `json:"rule_set_version"`
 	Demo           bool           `json:"demo"`
 }

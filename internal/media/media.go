@@ -7,6 +7,7 @@ package media
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -75,5 +76,12 @@ func (s *LocalStorage) Save(ctx context.Context, m Meta, r io.Reader) (Meta, err
 	}
 	m.Size = n
 	m.CreatedAt = time.Now().UTC()
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return Meta{}, err
+	}
+	if err = os.WriteFile(filepath.Join(s.root, m.ID+".json"), raw, 0600); err != nil {
+		return Meta{}, err
+	}
 	return m, nil
 }

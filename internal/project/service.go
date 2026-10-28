@@ -2,6 +2,8 @@ package project
 
 import (
 	"context"
+	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,7 +47,10 @@ func NewMemoryRepo() *MemoryRepo {
 func (r *MemoryRepo) SaveProject(ctx context.Context, p *Project) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.projects[p.ID] = p
+	cp := *p
+	cp.Participants = append([]Participant(nil), p.Participants...)
+	cp.RoomIDs = append([]RoomID(nil), p.RoomIDs...)
+	r.projects[p.ID] = &cp
 	return nil
 }
 
@@ -56,7 +61,10 @@ func (r *MemoryRepo) GetProject(ctx context.Context, pid ProjectID) (*Project, e
 	if !ok {
 		return nil, apperr.NotFound("проект не найден")
 	}
-	return p, nil
+	cp := *p
+	cp.Participants = append([]Participant(nil), p.Participants...)
+	cp.RoomIDs = append([]RoomID(nil), p.RoomIDs...)
+	return &cp, nil
 }
 
 func (r *MemoryRepo) SaveRoom(ctx context.Context, room *Room) error {
@@ -121,9 +129,11 @@ type UpdateInput struct {
 
 // AddRoomInput — вход добавления помещения.
 type AddRoomInput struct {
-	Name                        string
-	WidthMM, LengthMM, HeightMM int
-	DimensionsConfirmed         bool
+	Name                string `json:"name"`
+	WidthMM             int    `json:"width_mm"`
+	LengthMM            int    `json:"length_mm"`
+	HeightMM            int    `json:"height_mm"`
+	DimensionsConfirmed bool   `json:"dimensions_confirmed"`
 }
 
 // HistorySuggestion — кандидат из истории покупок для подтверждения.
@@ -458,4 +468,105 @@ func (s *Service) ListInventory(ctx context.Context, actor UserID, pid ProjectID
 		return nil, err
 	}
 	return s.repo.ListLots(ctx, pid)
+}
+
+func (s *Service) List(ctx context.Context, actor UserID) []Project {
+	r, ok := s.repo.(*MemoryRepo)
+	if !ok {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []Project{}
+	for _, p := range r.projects {
+		if ensureAccess(p, actor) == nil {
+			cp := *p
+			out = append(out, cp)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+func (s *Service) PutRoom(ctx context.Context, actor UserID, pid ProjectID, in AddRoomInput) (*Room, error) {
+	rooms, err := s.ListRoomsForActor(ctx, actor, pid)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(in.Name) == "" || in.WidthMM <= 0 || in.LengthMM <= 0 || in.HeightMM <= 0 || in.WidthMM > 100000 || in.LengthMM > 100000 || in.HeightMM > 10000 {
+		return nil, apperr.InvalidInput("Проверьте название и размеры комнаты", nil)
+	}
+	if len(rooms) == 0 {
+		return s.AddRoom(ctx, actor, pid, in)
+	}
+	if in.WidthMM <= 0 || in.LengthMM <= 0 || in.HeightMM <= 0 || in.WidthMM > 100000 || in.LengthMM > 100000 || in.HeightMM > 10000 {
+		return nil, apperr.InvalidInput("Проверьте размеры комнаты", nil)
+	}
+	p, _ := s.GetForActor(ctx, actor, pid)
+	if p.OwnerID != actor {
+		return nil, apperr.Forbidden("Размеры подтверждает владелец")
+	}
+	room := rooms[0]
+	room.Name = in.Name
+	room.WidthMM = in.WidthMM
+	room.LengthMM = in.LengthMM
+	room.HeightMM = in.HeightMM
+	room.DimensionsConfirmed = in.DimensionsConfirmed
+	r := s.repo.(*MemoryRepo)
+	r.mu.Lock()
+	r.rooms[pid][0] = room
+	r.mu.Unlock()
+	s.events.Append(string(pid), "room", "room.updated", string(actor), room)
+	return &room, nil
+}
+func (s *Service) Assign(ctx context.Context, actor UserID, pid ProjectID, foreman UserID) error {
+	p, err := s.GetForActor(ctx, actor, pid)
+	if err != nil {
+		return err
+	}
+	if p.OwnerID != actor {
+		return apperr.Forbidden("Исполнителя выбирает владелец")
+	}
+	parts := []Participant{{UserID: p.OwnerID, Role: RoleOwner}}
+	if foreman != "" {
+		parts = append(parts, Participant{UserID: foreman, Role: RoleForeman})
+		p.ExecutionMode = ModeForeman
+	} else {
+		p.ExecutionMode = ModeSelf
+	}
+	p.Participants = parts
+	p.Version++
+	return s.repo.SaveProject(ctx, p)
+}
+func (s *Service) ReplaceInventory(ctx context.Context, actor UserID, pid ProjectID, items []InventoryInput) error {
+	p, err := s.GetForActor(ctx, actor, pid)
+	if err != nil {
+		return err
+	}
+	if p.OwnerID != actor {
+		return apperr.Forbidden("Материалы подтверждает владелец")
+	}
+	r := s.repo.(*MemoryRepo)
+	r.mu.Lock()
+	r.lots[pid] = nil
+	r.mu.Unlock()
+	for _, item := range items {
+		if _, err = s.AddInventory(ctx, actor, pid, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MaterialInput is supplied by the specification service to bind reviews to current materials.
+func (s *Service) MaterialInput(ctx context.Context, pid ProjectID) string {
+	lots, _ := s.repo.ListLots(ctx, pid)
+	facts := []string{}
+	for _, l := range lots {
+		if l.Status == LotConfirmed {
+			facts = append(facts, l.SKU+":"+l.Amount+":"+l.Unit)
+		}
+	}
+	sort.Strings(facts)
+	raw, _ := json.Marshal(facts)
+	return string(raw)
 }

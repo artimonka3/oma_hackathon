@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"oma/internal/apperr"
 	"oma/internal/project"
 	"oma/internal/prorab"
 )
@@ -46,6 +47,22 @@ func (s *Server) handleCreateReview(w http.ResponseWriter, r *http.Request, sess
 	}
 	if in.ForemanID == "" {
 		in.ForemanID = prorab.DefaultForemanID
+	}
+	pid := r.PathValue("project_id")
+	if _, e := s.owner(r, sess, pid); e != nil {
+		respondError(w, r, e)
+		return
+	}
+	if s.cfg.Commerce != nil {
+		if s.meta(pid).Foreman != in.ForemanID {
+			respondError(w, r, apperr.InvalidInput("Выберите этого прораба для проекта", nil))
+			return
+		}
+		sp, e := s.cfg.Soberi.LatestSpecification(pid)
+		if e != nil || sp.SourceHash != s.cfg.Soberi.BasisHash(r.Context(), pid) {
+			respondError(w, r, apperr.NeedsData("Пересчитайте комплект перед отправкой", nil))
+			return
+		}
 	}
 	review, created, err := s.cfg.Prorab.CreateReview(r.Context(), project.UserID(sess.UserID), r.PathValue("project_id"), prorab.CreateReviewInput{
 		ForemanID: in.ForemanID,
@@ -165,6 +182,18 @@ func (s *Server) handleConfirmWorkPlan(w http.ResponseWriter, r *http.Request, s
 
 // POST /api/v1/stages/{id}/start — начать допустимый этап.
 func (s *Server) handleStartStage(w http.ResponseWriter, r *http.Request, sess Session) {
+	if s.cfg.Commerce != nil {
+		st, e := s.cfg.Prorab.GetStage(r.PathValue("stage_id"))
+		if e != nil {
+			respondError(w, r, e)
+			return
+		}
+		if e = s.readyToStart(r.Context(), st.ProjectID, st.ID); e != nil {
+			respondError(w, r, e)
+			return
+		}
+	}
+
 	stage, err := s.cfg.Prorab.StartStage(r.Context(), project.UserID(sess.UserID), r.PathValue("stage_id"))
 	if err != nil {
 		respondError(w, r, err)
@@ -181,6 +210,10 @@ func (s *Server) handleSubmitReport(w http.ResponseWriter, r *http.Request, sess
 		PhotoIDs []string `json:"photo_ids"`
 	}
 	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if err := s.validateReportMedia(r, sess, r.PathValue("stage_id"), in.PhotoIDs); err != nil {
+		respondError(w, r, err)
 		return
 	}
 	report, stage, err := s.cfg.Prorab.SubmitReport(r.Context(), project.UserID(sess.UserID), r.PathValue("stage_id"), prorab.ReportInput{

@@ -18,14 +18,17 @@ import (
 
 	"oma/fixtures"
 	"oma/internal/ai"
+	"oma/internal/checkpoint"
 	"oma/internal/events"
 	"oma/internal/httpapi"
 	"oma/internal/integrations/oma"
 	"oma/internal/jobs"
 	"oma/internal/media"
+	"oma/internal/mockoma"
 	"oma/internal/project"
 	"oma/internal/prorab"
 	"oma/internal/soberi"
+	webui "oma/web"
 )
 
 func main() {
@@ -70,26 +73,74 @@ func run() error {
 	// Границы модулей фиксируются один раз; обработчики и домены
 	// получают только нужные им зависимости.
 	eventLog := events.NewLog()
-	projectSvc := project.NewService(project.NewMemoryRepo(), eventLog)
+	repo := project.NewMemoryRepo()
+	projectSvc := project.NewService(repo, eventLog)
+	commerce := mockoma.New(mockoma.Options{Products: fixtures.Products()})
 
 	var shop oma.Client
+	var merchant oma.Commerce = commerce
 	if cfg.OMA_APIBaseURL != "" {
 		client, err := oma.NewHTTPClient(cfg.OMA_APIBaseURL)
 		if err != nil {
 			return err
 		}
 		shop = client
+		merchant = client
 		log.Printf("oma: магазин через HTTP API %s (Mock OMA или реальное API ОМА)", cfg.OMA_APIBaseURL)
 	} else {
-		shop = oma.NewFake(fixtures.Products())
+		shop = mockoma.Adapter{Service: commerce}
 		log.Printf("oma: реальный API не задан — используется встроенный симулятор (минимальный запуск)")
 	}
 
 	queue := jobs.NewQueue()
-	provider := ai.NewStub()
+	provider, err := ai.FromEnv()
+	if err != nil {
+		return err
+	}
 	soberiSvc := soberi.NewService(projectSvc, shop, queue, provider, eventLog)
 	prorabSvc := prorab.NewService(projectSvc, eventLog, fixtures.Foremen())
+	prorabSvc.SetMaterialHash(soberiSvc.ReviewHash)
+	sessions := httpapi.NewSessionStore()
+	appState := &httpapi.ApplicationState{Projects: map[string]*httpapi.ProjectMeta{}}
+	store := &checkpoint.Store{Path: envOr("OMA_STATE_PATH", "./var/state.json"), Components: map[string]checkpoint.Component{"projects": repo, "soberi": soberiSvc, "prorab": prorabSvc, "events": eventLog, "jobs": queue, "commerce": commerce, "sessions": sessions}, Extra: appState}
+	save := store.Save
+	storageMode := "file"
+	var ready func(context.Context) error
+	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
+		store.Path = os.Getenv("OMA_IMPORT_STATE_PATH")
+		db, err := checkpoint.OpenPostgres(ctx, databaseURL, store)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		if err = db.Load(); err != nil {
+			return err
+		}
+		save = func() error {
+			if err := db.Save(); err != nil {
+				log.Printf("PostgreSQL: сохранение не удалось, перезапуск для восстановления состояния")
+				stop()
+				return err
+			}
+			return nil
+		}
+		ready = db.Ping
+		storageMode = "postgres"
+	} else if err := store.Load(); err != nil {
+		return err
+	}
 
+	if remote, ok := shop.(*oma.HTTPClient); ok {
+		storageReady := ready
+		ready = func(ctx context.Context) error {
+			if storageReady != nil {
+				if e := storageReady(ctx); e != nil {
+					return e
+				}
+			}
+			return remote.Ready(ctx)
+		}
+	}
 	// Обработка сохранённых заданий в этом же процессе; cmd/worker
 	// подключается к общей очереди после этапа A (PostgreSQL).
 	processor := jobs.NewProcessor(queue, map[string]jobs.Handler{
@@ -105,14 +156,18 @@ func run() error {
 	srv := httpapi.NewServer(httpapi.Config{
 		DemoMode:      cfg.DemoMode,
 		ServiceSecret: cfg.ServiceSecret,
-		Sessions:      httpapi.NewSessionStore(),
-		Projects:      projectSvc,
-		Soberi:        soberiSvc,
-		Prorab:        prorabSvc,
-		Oma:           shop,
-		Jobs:          queue,
-		Events:        eventLog,
-		Media:         storage,
+		Sessions:      sessions,
+		State:         appState, Save: save, Static: webui.Handler(),
+		Projects:    projectSvc,
+		Soberi:      soberiSvc,
+		Prorab:      prorabSvc,
+		Oma:         shop,
+		Jobs:        queue,
+		Events:      eventLog,
+		Media:       storage,
+		Commerce:    merchant,
+		AIModel:     envOr("AI_MODEL", ai.DefaultModel),
+		StorageMode: storageMode, Ready: ready, AIMode: cfg.AIMode, ShopBaseURL: cfg.OMA_APIBaseURL,
 	})
 
 	httpServer := &http.Server{

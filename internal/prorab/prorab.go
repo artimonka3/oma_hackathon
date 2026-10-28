@@ -8,15 +8,19 @@ import "time"
 
 // Foreman — профиль исполнителя. Демо-профили помечены признаком demo.
 type Foreman struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Specialities []string `json:"specialities"`
-	Region       string   `json:"region"`
-	Availability string   `json:"availability"`
-	TeamSize     int      `json:"team_size"`
-	Conditions   string   `json:"conditions"`
-	Verified     bool     `json:"verified"`
-	Demo         bool     `json:"demo"`
+	Role            string   `json:"role"`
+	Bio             string   `json:"bio"`
+	ExperienceYears int      `json:"experience_years"`
+	PortraitIndex   int      `json:"portrait_index"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Specialities    []string `json:"specialities"`
+	Region          string   `json:"region"`
+	Availability    string   `json:"availability"`
+	TeamSize        int      `json:"team_size"`
+	Conditions      string   `json:"conditions"`
+	Verified        bool     `json:"verified"`
+	Demo            bool     `json:"demo"`
 }
 
 // ReviewStatus — состояние проверки комплекта (раздел 3 ТЗ).

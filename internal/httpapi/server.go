@@ -6,7 +6,13 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+	"sync"
 
 	"oma/internal/apperr"
 	"oma/internal/events"
@@ -24,6 +30,7 @@ func notImplementedErr(name string) error {
 
 // Config — зависимости сервера; границы модулей фиксируются здесь.
 type Config struct {
+	AIModel       string
 	DemoMode      bool
 	ServiceSecret string
 	Sessions      *SessionStore
@@ -34,25 +41,69 @@ type Config struct {
 	Jobs          *jobs.Queue
 	Events        *events.Log
 	Media         media.Storage
+	Commerce      oma.Commerce
+	State         *ApplicationState
+	Save          func() error
+	Static        http.Handler
+	StorageMode   string
+	Ready         func(context.Context) error
+	AIMode        string
+	ShopBaseURL   string
 }
 
 // Server — HTTP API основного Go-приложения.
 type Server struct {
-	cfg Config
-	mux *http.ServeMux
+	cfg     Config
+	mux     *http.ServeMux
+	mu      sync.Mutex
+	permits sync.Map
 }
 
 // NewServer собирает сервер и регистрирует маршруты API v1
 // (раздел 7 технической спецификации).
 func NewServer(cfg Config) *Server {
+	if cfg.State == nil {
+		cfg.State = &ApplicationState{Projects: map[string]*ProjectMeta{}}
+	}
+	if cfg.State.Projects == nil {
+		cfg.State.Projects = map[string]*ProjectMeta{}
+	}
 	s := &Server{cfg: cfg, mux: http.NewServeMux()}
 	s.routes()
+	if u, e := url.Parse(cfg.ShopBaseURL); e == nil && u.Host != "" {
+		proxy := http.StripPrefix("/shop", httputil.NewSingleHostReverseProxy(u))
+		for _, method := range []string{"GET", "POST", "OPTIONS"} {
+			s.mux.Handle(method+" /shop/", proxy)
+		}
+	}
 	return s
 }
 
 // Handler возвращает цепочку middleware поверх маршрутизатора.
 func (s *Server) Handler() http.Handler {
-	return recoverer(requestID(logger(s.mux)))
+	return recoverer(requestID(logger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			s.mux.ServeHTTP(w, r)
+			return
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		buf := httptest.NewRecorder()
+		s.mux.ServeHTTP(buf, r)
+		if s.cfg.Save != nil && buf.Code < 400 {
+			if err := s.cfg.Save(); err != nil {
+				respondError(w, r, err)
+				return
+			}
+		}
+		for key, vals := range buf.Header() {
+			for _, v := range vals {
+				w.Header().Add(key, v)
+			}
+		}
+		w.WriteHeader(buf.Code)
+		_, _ = w.Write(buf.Body.Bytes())
+	}))))
 }
 
 // auth оборачивает обработчик проверкой сессии.
@@ -62,6 +113,23 @@ func (s *Server) auth(next func(http.ResponseWriter, *http.Request, Session)) ht
 		if err != nil {
 			respondError(w, r, err)
 			return
+		}
+
+		pid := r.PathValue("project_id")
+		if pid != "" && r.Method != "GET" && r.Method != "HEAD" {
+			path := r.URL.Path
+			material := strings.HasSuffix(path, "/room") || strings.HasSuffix(path, "/rooms") || strings.HasSuffix(path, "/inventory") || strings.HasSuffix(path, "/inventory-suggestions") || strings.HasSuffix(path, "/design-jobs") || strings.HasSuffix(path, "/design-selections") || strings.HasSuffix(path, "/specifications") || strings.HasSuffix(path, "/cart-sync") || strings.HasSuffix(path, "/cart") || r.Method == "PATCH" && path == "/api/v1/projects/"+pid
+			if material {
+				if _, err := s.owner(r, sess, pid); err != nil {
+					respondError(w, r, err)
+					return
+				}
+				m := s.meta(pid)
+				if m.Order != "" || m.Finished {
+					respondError(w, r, apperr.New("INVALID_TRANSITION", "Заказ уже оформлен. Для нового объёма создайте отдельный проект", nil))
+					return
+				}
+			}
 		}
 		next(w, r, sess)
 	}
@@ -78,6 +146,27 @@ func (s *Server) stub(name string) http.HandlerFunc {
 func (s *Server) routes() {
 	m := s.mux
 
+	if s.cfg.Static != nil {
+		m.Handle("GET /", s.cfg.Static)
+	}
+	// Application endpoints reuse the existing domains.
+	m.HandleFunc("GET /api/v1/projects", s.auth(s.handleProjects))
+	m.HandleFunc("GET /api/v1/catalog", s.auth(s.handleCatalog))
+	m.HandleFunc("GET /api/v1/catalog/{sku}", s.auth(s.handleCatalogProduct))
+	m.HandleFunc("GET /api/v1/projects/{project_id}/application", s.auth(s.handleApplication))
+	m.HandleFunc("PUT /api/v1/projects/{project_id}/room", s.auth(s.handleRoomPut))
+	m.HandleFunc("PUT /api/v1/projects/{project_id}/inventory", s.auth(s.handleInventoryPut))
+	m.HandleFunc("PATCH /api/v1/projects/{project_id}/cart", s.auth(s.handleSetPacks))
+	m.HandleFunc("PUT /api/v1/projects/{project_id}/foreman", s.auth(s.handleAssign))
+	m.HandleFunc("GET /api/v1/projects/{project_id}/analysis", s.auth(s.handleAnalysis))
+	m.HandleFunc("POST /api/v1/projects/{project_id}/checkout", s.auth(s.handlePrepareCheckout))
+	m.HandleFunc("POST /api/v1/projects/{project_id}/pay", s.auth(s.handlePay))
+	m.HandleFunc("POST /api/v1/projects/{project_id}/demo-delivery", s.auth(s.handleDelivery))
+	m.HandleFunc("POST /api/v1/projects/{project_id}/default-plan", s.auth(s.handleDefaultPlan))
+	m.HandleFunc("POST /api/v1/projects/{project_id}/finish", s.auth(s.handleFinish))
+	m.HandleFunc("GET /api/v1/media/{media_id}", s.auth(s.handleMedia))
+	m.HandleFunc("GET /api/v1/config", s.handlePublicConfig)
+	m.HandleFunc("GET /readyz", s.handleReady)
 	// Служебные.
 	m.HandleFunc("GET /healthz", s.handleHealth)
 	m.HandleFunc("POST /internal/v1/oma/checkout-authorizations", s.handleCheckoutAuthorization)

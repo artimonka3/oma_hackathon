@@ -35,6 +35,10 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request, sess Sessi
 		respondError(w, r, err)
 		return
 	}
+	if _, err := s.cfg.Projects.GetForActor(r.Context(), project.UserID(sess.UserID), project.ProjectID(job.ProjectID)); err != nil {
+		respondError(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, job)
 }
 

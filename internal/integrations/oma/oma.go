@@ -7,16 +7,31 @@ package oma
 import "context"
 
 // Product — товар каталога.
+// Расширенные поля (image_url, source_url и др.) заполняет каталог,
+// собранный скрапером oma-site; базовые поля — контракт интеграции.
 type Product struct {
-	SKU        string `json:"sku"`
-	Title      string `json:"title"`
-	Category   string `json:"category"`
-	Unit       string `json:"unit"`
-	PackAmount int    `json:"pack_amount"`
-	PriceMinor int64  `json:"price_minor"`
-	Currency   string `json:"currency"`
-	Stock      int    `json:"stock"`
-	Demo       bool   `json:"demo"`
+	CalculationSupported bool    `json:"calculation_supported"`
+	CalculationNote      string  `json:"calculation_note,omitempty"`
+	SalesUnit            string  `json:"sales_unit,omitempty"`
+	SKU                  string  `json:"sku"`
+	Title                string  `json:"title"`
+	Category             string  `json:"category"`
+	Unit                 string  `json:"unit"`
+	PackAmount           float64 `json:"pack_amount"`
+	Coverage             float64 `json:"coverage,omitempty"`
+	Material             string  `json:"material,omitempty"`
+	PriceMinor           int64   `json:"price_minor"`
+	Currency             string  `json:"currency"`
+	Stock                int     `json:"stock"`
+	Demo                 bool    `json:"demo"`
+	OldPriceMinor        int64   `json:"old_price_minor,omitempty"`
+	Brand                string  `json:"brand,omitempty"`
+	Country              string  `json:"country,omitempty"`
+	Description          string  `json:"description,omitempty"`
+	ImageURL             string  `json:"image_url,omitempty"`
+	SourceURL            string  `json:"source_url,omitempty"`
+	OmaCategory          string  `json:"oma_category,omitempty"`
+	UnitsRaw             string  `json:"units_raw,omitempty"`
 }
 
 // HistoryItem — запись истории покупок торговой учётной записи.
