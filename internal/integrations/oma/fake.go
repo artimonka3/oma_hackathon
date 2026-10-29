@@ -55,7 +55,7 @@ func (f *Fake) SearchProducts(ctx context.Context, query string) ([]Product, err
 	q := strings.ToLower(strings.TrimSpace(query))
 	out := make([]Product, 0, len(f.products))
 	for _, p := range f.products {
-		if q == "" || strings.Contains(strings.ToLower(p.Title), q) || strings.Contains(strings.ToLower(p.Category), q) {
+		if q == "" || strings.Contains(strings.ToLower(p.Title), q) || strings.Contains(strings.ToLower(p.Category), q) || strings.Contains(strings.ToLower(p.SKU), q) {
 			out = append(out, p)
 		}
 	}

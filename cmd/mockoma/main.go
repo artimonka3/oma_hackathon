@@ -8,15 +8,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"oma/fixtures"
 	"oma/internal/apperr"
+	"oma/internal/checkpoint"
 	"oma/internal/integrations/oma"
 	"oma/internal/mockoma"
 )
@@ -35,18 +40,46 @@ func run() error {
 	appBase := os.Getenv("OMA_APP_BASE_URL") // например http://localhost:8080; пусто — без обратных вызовов
 	secret := os.Getenv("OMA_SERVICE_SECRET")
 
+	// MOCKOMA_PRODUCTS_FILE — каталог из файла (например, скрап oma-site/data/products.json);
+	// без переменной используется демонстрационный fixtures.Products().
+	products, productSource, err := loadProducts(os.Getenv("MOCKOMA_PRODUCTS_FILE"))
+	if err != nil {
+		return err
+	}
+
 	svc := mockoma.New(mockoma.Options{
-		Products:      fixtures.Products(),
-		AppBaseURL:    appBase,
-		ServiceSecret: secret,
+		Products:       products,
+		LegacyProducts: fixtures.Products(),
+		AppBaseURL:     appBase,
+		ServiceSecret:  secret,
 	})
+	source := &checkpoint.Store{Path: os.Getenv("MOCKOMA_STATE_PATH"), Namespace: "oma_shop", ImportNamespace: "public", Components: map[string]checkpoint.Component{"commerce": svc}, Extra: &map[string]any{}}
+	var save func() error
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		db, e := checkpoint.OpenPostgres(ctx, dsn, source)
+		if e != nil {
+			return e
+		}
+		defer db.Close()
+		if e = db.Load(); e != nil {
+			return e
+		}
+		save = db.Save
+	} else if source.Path != "" {
+		if e := source.Load(); e != nil {
+			return e
+		}
+		save = source.Save
+	}
 	mux := http.NewServeMux()
 	registerRoutes(mux, svc)
+	registerSite(mux, os.Getenv("MOCKOMA_SITE_DIR"))
 
-	server := &http.Server{Addr: addr, Handler: logRequests(mux), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: addr, Handler: enableCORS(logRequests(persistShop(mux, save))), ReadHeaderTimeout: 5 * time.Second}
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("mockoma: симулятор API магазина слушает %s (callbacks=%s)", addr, appBaseOr(appBase))
+		log.Printf("mockoma: симулятор API магазина слушает %s (callbacks=%s, каталог=%s, %d товаров)",
+			addr, appBaseOr(appBase), productSource, len(products))
 		errCh <- server.ListenAndServe()
 	}()
 
@@ -72,6 +105,48 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// loadProducts читает каталог из JSON-файла либо возвращает демонстрационные фикстуры.
+func loadProducts(path string) ([]oma.Product, string, error) {
+	if path == "" {
+		return fixtures.Products(), "fixtures", nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("mockoma: каталог: %w", err)
+	}
+	var products []oma.Product
+	if err := json.Unmarshal(raw, &products); err != nil {
+		return nil, "", fmt.Errorf("mockoma: каталог %s: %w", path, err)
+	}
+	if len(products) == 0 {
+		return nil, "", fmt.Errorf("mockoma: каталог %s пуст", path)
+	}
+	return products, path, nil
+}
+
+// registerSite раздаёт статичную витрину (oma-site/site), если каталог задан.
+func registerSite(mux *http.ServeMux, dir string) {
+	if dir == "" {
+		return
+	}
+	fs := http.FileServer(http.Dir(dir))
+	mux.Handle("GET /", fs)
+}
+
+// enableCORS разрешает кросс-доменные запросы к витрине, открытой отдельно от API.
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func logRequests(next http.Handler) http.Handler {
@@ -106,6 +181,31 @@ func respondErr(w http.ResponseWriter, err error) {
 }
 
 func registerRoutes(mux *http.ServeMux, svc *mockoma.Service) {
+	mux.HandleFunc("GET /oma-api/v1/projects/{project_id}/cart", func(w http.ResponseWriter, r *http.Request) {
+		v, e := svc.CartForProject(r.PathValue("project_id"))
+		if e != nil {
+			respondErr(w, e)
+			return
+		}
+		writeJSON(w, 200, v)
+	})
+	mux.HandleFunc("GET /oma-api/v1/quotes/{quote_id}", func(w http.ResponseWriter, r *http.Request) {
+		v, e := svc.Quote(r.PathValue("quote_id"))
+		if e != nil {
+			respondErr(w, e)
+			return
+		}
+		writeJSON(w, 200, v)
+	})
+	mux.HandleFunc("GET /oma-api/v1/checkout-sessions/{checkout_id}", func(w http.ResponseWriter, r *http.Request) {
+		v, e := svc.Checkout(r.PathValue("checkout_id"))
+		if e != nil {
+			respondErr(w, e)
+			return
+		}
+		writeJSON(w, 200, v)
+	})
+
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "mock-oma", "demo": true})
 	})
@@ -122,6 +222,9 @@ func registerRoutes(mux *http.ServeMux, svc *mockoma.Service) {
 			return
 		}
 		writeJSON(w, http.StatusOK, p)
+	})
+	mux.HandleFunc("GET /oma-api/v1/categories", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"categories": svc.Categories(), "demo": true})
 	})
 	mux.HandleFunc("GET /oma-api/v1/purchase-history", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"items": svc.History(r.URL.Query().Get("account")), "demo": true})
@@ -201,5 +304,30 @@ func registerRoutes(mux *http.ServeMux, svc *mockoma.Service) {
 			return
 		}
 		writeJSON(w, http.StatusOK, order)
+	})
+}
+
+func persistShop(next http.Handler, save func() error) http.Handler {
+	var mu sync.Mutex
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" || !strings.HasPrefix(r.URL.Path, "/oma-api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		buf := httptest.NewRecorder()
+		next.ServeHTTP(buf, r)
+		if save != nil && buf.Code < 400 {
+			if e := save(); e != nil {
+				writeJSON(w, 503, map[string]string{"code": "STORAGE_UNAVAILABLE", "message": "Магазин не смог сохранить операцию"})
+				return
+			}
+		}
+		for k, v := range buf.Header() {
+			w.Header()[k] = v
+		}
+		w.WriteHeader(buf.Code)
+		w.Write(buf.Body.Bytes())
 	})
 }

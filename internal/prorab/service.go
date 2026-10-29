@@ -48,9 +48,10 @@ type StageDecisionRecord struct {
 
 // Service — бизнес-логика ОМА.Прораб.
 type Service struct {
-	projects *project.Service
-	events   *events.Log
-	foremen  []Foreman
+	projects     *project.Service
+	events       *events.Log
+	foremen      []Foreman
+	materialHash func(string) string
 
 	mu             sync.Mutex
 	reviews        map[string]*Review
@@ -207,14 +208,20 @@ func (s *Service) CreateReview(ctx context.Context, actor project.UserID, pid st
 	if strings.TrimSpace(in.Scope) == "" {
 		in.Scope = "project"
 	}
+	p0, _ := s.projects.InternalProject(ctx, project.ProjectID(pid))
+	rooms0, _ := s.projects.RoomsOf(ctx, p0.ID)
+	current := s.currentHash(p0, rooms0)
 	key := pid + "|" + in.ForemanID + "|" + in.Scope
 	s.mu.Lock()
 	if existingID, ok := s.activeReview[key]; ok {
-		if r, ok := s.reviews[existingID]; ok && isActiveReview(r.Status) {
+		if r, ok := s.reviews[existingID]; ok && isActiveReview(r.Status) && r.InputHash == current && r.Status != ReviewNeedsInfo && r.Status != ReviewNeedsVisit {
 			cp := *r
 			s.mu.Unlock()
 			return &cp, false, nil
 		}
+	}
+	if previous := s.reviews[s.activeReview[key]]; previous != nil {
+		previous.Status = ReviewSuperseded
 	}
 	p, err := s.projects.InternalProject(ctx, project.ProjectID(pid))
 	if err != nil {
@@ -232,7 +239,7 @@ func (s *Service) CreateReview(ctx context.Context, actor project.UserID, pid st
 		ForemanID: in.ForemanID,
 		Scope:     in.Scope,
 		Status:    ReviewInReview,
-		InputHash: inputHash(p, rooms),
+		InputHash: s.currentHash(p, rooms),
 		HashRules: "v1",
 		Version:   1,
 		CreatedAt: time.Now().UTC(),
@@ -278,6 +285,19 @@ type ReviewDecisionInput struct {
 // ReviewDecision применяет решение исполнителя с проверкой роли
 // и допустимости перехода (раздел 4.2 ТЗ).
 func (s *Service) ReviewDecision(ctx context.Context, actor project.UserID, reviewID string, in ReviewDecisionInput) (*Review, error) {
+	cp0, e := s.GetReview(reviewID)
+	if e != nil {
+		return nil, e
+	}
+	p0, e := s.projects.InternalProject(ctx, project.ProjectID(cp0.ProjectID))
+	if e != nil {
+		return nil, e
+	}
+	rooms0, _ := s.projects.RoomsOf(ctx, p0.ID)
+	if cp0.InputHash != s.currentHash(p0, rooms0) {
+		return nil, apperr.NeedsData("Комплект изменился. Заказчик должен отправить его заново", nil)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, err := s.review(reviewID)
@@ -352,7 +372,7 @@ func (s *Service) AcceptProposal(ctx context.Context, actor project.UserID, revi
 	if err != nil {
 		return nil, err
 	}
-	current := inputHash(p, rooms)
+	current := s.currentHash(p, rooms)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, _ = s.review(reviewID)
@@ -402,6 +422,11 @@ func (s *Service) CreateWorkPlan(ctx context.Context, actor project.UserID, pid 
 	}
 	if p.OwnerID != actor && string(actor) != foremanID {
 		return nil, apperr.Forbidden("план предлагает назначенный исполнитель или владелец проекта")
+	}
+	for _, st := range in.Stages {
+		if strings.TrimSpace(st.Title) == "" {
+			return nil, apperr.InvalidInput("название этапа обязательно", nil)
+		}
 	}
 	plan := &WorkPlan{
 		ID:        id.New("plan"),
@@ -681,7 +706,7 @@ func (s *Service) StageDecision(ctx context.Context, actor project.UserID, stage
 		CreatedAt:           time.Now().UTC(),
 	})
 	s.events.Append(st.ProjectID, "stage", "stage."+string(target), string(actor),
-		map[string]any{"stage_id": stageID, "report_id": reportID})
+		map[string]any{"stage_id": stageID, "report_id": reportID, "comment": in.Comment})
 	out := *st
 	return &out, nil
 }
@@ -725,6 +750,31 @@ func (s *Service) GetReview(reviewID string) (*Review, error) {
 func containsFold(items []string, needle string) bool {
 	for _, it := range items {
 		if strings.EqualFold(it, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) SetMaterialHash(fn func(string) string) { s.materialHash = fn }
+func (s *Service) currentHash(p *project.Project, rooms []project.Room) string {
+	h := inputHash(p, rooms)
+	if s.materialHash != nil {
+		h += s.materialHash(string(p.ID))
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(h)))
+}
+func (s *Service) ValidReview(ctx context.Context, pid, foreman string) bool {
+	p, e := s.projects.InternalProject(ctx, project.ProjectID(pid))
+	if e != nil {
+		return false
+	}
+	rooms, _ := s.projects.RoomsOf(ctx, p.ID)
+	hash := s.currentHash(p, rooms)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, v := range s.reviews {
+		if v.ProjectID == pid && v.ForemanID == foreman && v.Status == ReviewApproved && v.InputHash == hash {
 			return true
 		}
 	}

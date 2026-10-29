@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+!.env.example
+bin
+var
+oma-site/*
+!oma-site/data/
+!oma-site/data/**
+!oma-site/site/
+!oma-site/site/**
+oma-design-prototype.zip
+oma-prototype.html
+design-prototype
+web/preview

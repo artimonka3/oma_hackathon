@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#065ca9" />
+    <title>ОМА.Подбор — от идеи до ремонта</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="#welcome"
+        ><img src="/assets/oma-logo.png" alt="ОМА" /><span
+          ><b id="service">Подбор</b><small>ваш дом, шаг за шагом</small></span
+        ></a
+      >
+      <nav id="nav" aria-label="Навигация"></nav>
+      <div class="header-actions">
+        <a class="header-ar" href="#ar" hidden
+          ><svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            aria-hidden="true"
+          >
+            <path
+              d="M3 8V3h5m8 0h5v5m0 8v5h-5M8 21H3v-5M7 9l5-3 5 3v6l-5 3-5-3zM7 9l5 3 5-3m-5 3v6"
+            /></svg
+          >AR-комната <span>↗</span></a
+        >
+        <button id="switch-service" class="text-button">
+          Перейти в ОМА.Прораб ↗
+        </button>
+        <details class="role-menu">
+          <summary id="role-label">Заказчик · демо</summary>
+          <button data-role="client">Кабинет заказчика</button
+          ><button data-role="foreman">Кабинет выбранного прораба</button>
+        </details>
+      </div>
+    </header>
+    <div class="demo-bar">
+      Хакатон ОМА · AI и оплата работают в деморежиме · данные проекта
+      сохраняются на сервере
+    </div>
+    <main id="app" tabindex="-1">
+      <p class="loading">Загружаем ваш проект…</p>
+    </main>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <footer>
+      <span>ОМА. Всё начинается с дома.</span
+      ><span
+        >Прототип MVP ·
+        <a
+          href="https://deerflow.tech"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Created By Deerflow</a
+        ></span
+      >
+    </footer>
+  </body>
+</html>

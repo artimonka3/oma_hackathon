@@ -1,0 +1,47 @@
+[
+ {
+  "category": "flooring",
+  "title": "Напольные покрытия",
+  "count": 156
+ },
+ {
+  "category": "accessory",
+  "title": "Плинтусы, порожки, фурнитура",
+  "count": 141
+ },
+ {
+  "category": "paint",
+  "title": "Краски и эмали",
+  "count": 95
+ },
+ {
+  "category": "coating",
+  "title": "Лаки, масла, пропитки",
+  "count": 51
+ },
+ {
+  "category": "wallpaper",
+  "title": "Обои",
+  "count": 50
+ },
+ {
+  "category": "primer",
+  "title": "Грунтовки",
+  "count": 48
+ },
+ {
+  "category": "tiling",
+  "title": "Плитка и затирка",
+  "count": 47
+ },
+ {
+  "category": "door",
+  "title": "Двери",
+  "count": 19
+ },
+ {
+  "category": "misc",
+  "title": "Прочее",
+  "count": 4
+ }
+]

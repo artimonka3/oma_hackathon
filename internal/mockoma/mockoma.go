@@ -25,73 +25,19 @@ import (
 	"oma/internal/integrations/oma"
 )
 
-// CartLine — строка корзины. Проектные строки связаны link_id.
-type CartLine struct {
-	LinkID      string `json:"link_id"`
-	SKU         string `json:"sku"`
-	RoomID      string `json:"room_id,omitempty"`
-	Packs       int    `json:"packs"`
-	ProjectLine bool   `json:"project_line"`
-	PriceMinor  int64  `json:"price_minor"`
-}
-
-// Cart — торговая корзина с версионированием.
-type Cart struct {
-	ID         string     `json:"id"`
-	ProjectID  string     `json:"project_id"`
-	Lines      []CartLine `json:"lines"`
-	Version    int64      `json:"version"`
-	TotalMinor int64      `json:"total_minor"`
-	Currency   string     `json:"currency"`
-}
-
-// Quote — неизменяемая котировка корзины с суммой и сроком.
-type Quote struct {
-	ID         string     `json:"id"`
-	CartID     string     `json:"cart_id"`
-	ProjectID  string     `json:"project_id"`
-	Lines      []CartLine `json:"lines"`
-	TotalMinor int64      `json:"total_minor"`
-	Currency   string     `json:"currency"`
-	Version    int64      `json:"version"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-}
-
-// CheckoutSession — оформление котировки.
-type CheckoutSession struct {
-	ID      string `json:"id"`
-	QuoteID string `json:"quote_id"`
-	State   string `json:"state"` // draft | authorized | paid | failed
-	OrderID string `json:"order_id,omitempty"`
-}
-
-// Delivery — поставка по заказу.
-type Delivery struct {
-	Status  string    `json:"status"`
-	Comment string    `json:"comment"`
-	At      time.Time `json:"at"`
-}
-
-// Order — заказ с распределением поставок.
-type Order struct {
-	ID         string     `json:"id"`
-	ProjectID  string     `json:"project_id"`
-	CartID     string     `json:"cart_id"`
-	QuoteID    string     `json:"quote_id"`
-	Lines      []CartLine `json:"lines"`
-	TotalMinor int64      `json:"total_minor"`
-	Currency   string     `json:"currency"`
-	Status     string     `json:"status"`
-	Deliveries []Delivery `json:"deliveries"`
-	CreatedAt  time.Time  `json:"created_at"`
-	Demo       bool       `json:"demo"`
-}
+type CartLine = oma.CartLine
+type Cart = oma.Cart
+type Quote = oma.Quote
+type CheckoutSession = oma.CheckoutSession
+type Delivery = oma.Delivery
+type Order = oma.Order
 
 // Options — настройки симулятора.
 type Options struct {
-	Products      []oma.Product
-	AppBaseURL    string // основной backend, например http://localhost:8080; пусто — без обратных вызовов
-	ServiceSecret string
+	Products       []oma.Product
+	LegacyProducts []oma.Product
+	AppBaseURL     string // основной backend, например http://localhost:8080; пусто — без обратных вызовов
+	ServiceSecret  string
 }
 
 // Service — домен симулятора магазина.
@@ -130,6 +76,11 @@ func New(opts Options) *Service {
 }
 
 func (s *Service) product(sku string) (oma.Product, error) {
+	for _, p := range s.opts.LegacyProducts {
+		if p.SKU == sku {
+			return p, nil
+		}
+	}
 	for _, p := range s.products {
 		if p.SKU == sku {
 			return p, nil
@@ -143,7 +94,7 @@ func (s *Service) Search(query, category string) []oma.Product {
 	q := strings.ToLower(strings.TrimSpace(query))
 	out := make([]oma.Product, 0, len(s.products))
 	for _, p := range s.products {
-		matchQ := q == "" || strings.Contains(strings.ToLower(p.Title), q) || strings.Contains(strings.ToLower(p.SKU), q)
+		matchQ := q == "" || strings.Contains(strings.ToLower(p.Title), q) || strings.Contains(strings.ToLower(p.SKU), q) || strings.Contains(strings.ToLower(p.Category), q)
 		matchC := category == "" || strings.EqualFold(p.Category, category)
 		if matchQ && matchC {
 			out = append(out, p)
@@ -155,6 +106,26 @@ func (s *Service) Search(query, category string) []oma.Product {
 
 // Get возвращает карточку товара.
 func (s *Service) Get(sku string) (oma.Product, error) { return s.product(sku) }
+
+// CategoryStat — категория каталога и число товаров в ней.
+type CategoryStat struct {
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+}
+
+// Categories возвращает список категорий каталога с количеством товаров.
+func (s *Service) Categories() []CategoryStat {
+	counts := map[string]int{}
+	for _, p := range s.products {
+		counts[p.Category]++
+	}
+	out := make([]CategoryStat, 0, len(counts))
+	for c, n := range counts {
+		out = append(out, CategoryStat{Category: c, Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Category < out[j].Category })
+	return out
+}
 
 // History отдаёт демо-историю покупок торговой учётной записи.
 func (s *Service) History(accountID string) []oma.HistoryItem {
@@ -179,9 +150,7 @@ func (s *Service) SyncCart(req oma.SyncRequest) (oma.SyncResult, error) {
 	if strings.TrimSpace(req.ProjectID) == "" {
 		return oma.SyncResult{}, apperr.InvalidInput("project_id обязателен для связанной корзины", nil)
 	}
-	if len(req.Lines) == 0 {
-		return oma.SyncResult{}, apperr.InvalidInput("состав строк пуст", nil)
-	}
+
 	for _, l := range req.Lines {
 		if l.Packs <= 0 {
 			return oma.SyncResult{}, apperr.InvalidInput("количество упаковок должно быть положительным", nil)
@@ -205,6 +174,13 @@ func (s *Service) SyncCart(req oma.SyncRequest) (oma.SyncResult, error) {
 		s.carts[cart.ID] = cart
 		s.cartByProject[req.ProjectID] = cart.ID
 	}
+	kept := []CartLine{}
+	for _, line := range cart.Lines {
+		if !line.ProjectLine {
+			kept = append(kept, line)
+		}
+	}
+	cart.Lines = kept
 	for _, l := range req.Lines {
 		p, _ := s.product(l.SKU)
 		line := CartLine{
@@ -341,6 +317,11 @@ func (s *Service) Pay(ctx context.Context, sessionID string) (*Order, error) {
 		}
 	}
 	s.mu.Lock()
+	if sess.State == "paid" {
+		existing := *s.orders[sess.OrderID]
+		s.mu.Unlock()
+		return &existing, nil
+	}
 	sess.State = "authorized"
 	s.orderSeq++
 	order := &Order{

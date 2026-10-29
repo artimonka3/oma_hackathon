@@ -65,7 +65,8 @@ func (q *Queue) Enqueue(kind, projectID string, input any) *Job {
 	}
 	q.jobs[j.ID] = j
 	q.order = append(q.order, j.ID)
-	return j
+	cp := *j
+	return &cp
 }
 
 // Get возвращает копию задания.

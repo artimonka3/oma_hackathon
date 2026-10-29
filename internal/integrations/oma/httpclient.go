@@ -57,6 +57,14 @@ func (c *HTTPClient) call(ctx context.Context, method, path string, query url.Va
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
+		var e struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Details any    `json:"details"`
+		}
+		if resp.StatusCode < 500 && json.NewDecoder(io.LimitReader(resp.Body, 16384)).Decode(&e) == nil && e.Code != "" {
+			return apperr.New(e.Code, e.Message, e.Details)
+		}
 		return apperr.IntegrationUnavailable(fmt.Sprintf("магазин ОМА вернул статус %d", resp.StatusCode))
 	}
 	if out == nil {
@@ -77,6 +85,9 @@ func (c *HTTPClient) SearchProducts(ctx context.Context, query string) ([]Produc
 	if err := c.call(ctx, http.MethodGet, "/oma-api/v1/products", q, nil, &out); err != nil {
 		return nil, err
 	}
+	for i := range out.Products {
+		out.Products[i] = NormalizeProduct(out.Products[i])
+	}
 	return out.Products, nil
 }
 
@@ -86,7 +97,7 @@ func (c *HTTPClient) GetProduct(ctx context.Context, sku string) (Product, error
 	if err := c.call(ctx, http.MethodGet, "/oma-api/v1/products/"+url.PathEscape(sku), nil, nil, &out); err != nil {
 		return Product{}, err
 	}
-	return out, nil
+	return NormalizeProduct(out), nil
 }
 
 // PurchaseHistory возвращает историю покупок торговой учётной записи.
@@ -108,4 +119,9 @@ func (c *HTTPClient) SyncCart(ctx context.Context, req SyncRequest) (SyncResult,
 		return SyncResult{}, err
 	}
 	return out, nil
+}
+
+func (c *HTTPClient) Ready(ctx context.Context) error {
+	var out map[string]any
+	return c.call(ctx, http.MethodGet, "/healthz", nil, nil, &out)
 }

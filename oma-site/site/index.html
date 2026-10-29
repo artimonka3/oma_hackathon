@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ОМА · мок-витрина проекта</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header__inner">
+      <a class="logo" href="?">
+        <span class="logo__mark">ОМА</span>
+        <span class="logo__note">мок-каталог проекта</span>
+      </a>
+      <form class="search" id="search-form">
+        <input class="search__input" id="search-input" type="search"
+               placeholder="Поиск по каталогу: краска, ламинат, плитка…" autocomplete="off">
+        <button class="search__btn" type="submit">Найти</button>
+      </form>
+      <a class="back-podbor" href="/#welcome">ОМА.Подбор ↗</a>
+      <button class="cart-btn" id="cart-btn" type="button">
+        Корзина <span class="cart-btn__count" id="cart-count" hidden>0</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <nav class="cats" id="cats">
+        <div class="cats__title">Каталог</div>
+        <button class="cats__item cats__item--active" data-category="">Все товары</button>
+      </nav>
+      <section class="hint">
+        <p><strong>Демо-данные.</strong> Каталог собран скрапером oma-site из публичных страниц oma.by и раздаётся мок-API проекта <code>/oma-api/v1</code>. Реальные покупки не совершаются.</p>
+        <p class="hint__api">API: <code id="api-base"></code></p>
+      </section>
+    </aside>
+
+    <section class="content">
+      <div class="toolbar">
+        <h1 class="toolbar__title" id="list-title">Все товары</h1>
+        <span class="toolbar__meta" id="list-meta"></span>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="empty" id="empty" hidden>
+        <p>Ничего не найдено. Измените запрос или выберите другую категорию.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="product-modal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__box">
+      <button class="modal__close" type="button" data-close>×</button>
+      <div class="modal__body" id="product-body"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="cart-modal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__box">
+      <button class="modal__close" type="button" data-close>×</button>
+      <div class="modal__body" id="cart-body"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span>Мок интеграции с ОМА · хакатонный проект</span>
+    <span id="footer-api"></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

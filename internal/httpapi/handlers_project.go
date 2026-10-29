@@ -129,6 +129,11 @@ func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request, sess Se
 // POST /api/v1/projects/{id}/captures — загрузить фото, план или захват.
 func (s *Server) handleAddCapture(w http.ResponseWriter, r *http.Request, sess Session) {
 	pid := r.PathValue("project_id")
+	if _, err := s.cfg.Projects.GetForActor(r.Context(), project.UserID(sess.UserID), project.ProjectID(pid)); err != nil {
+		respondError(w, r, err)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<20)
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
 		respondError(w, r, apperr.InvalidInput("ожидается multipart/form-data с полем file", nil))
 		return

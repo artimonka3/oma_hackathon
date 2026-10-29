@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"oma/internal/apperr"
 )
@@ -41,12 +43,23 @@ func (s *Server) handleCheckoutAuthorization(w http.ResponseWriter, r *http.Requ
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":     "authorized",
-		"quote_id":   in.QuoteID,
-		"project_id": in.ProjectID,
-		"note":       "каркас: полная проверка подтверждений и отпечатка состава — этап G ТЗ",
-	})
+	// Standalone clone carts use a separate demo identifier; project carts require an active payment permit.
+	if in.ProjectID != "" && !strings.HasPrefix(in.ProjectID, "prj_") {
+		writeJSON(w, 200, map[string]string{"status": "authorized", "mode": "standalone_shop_demo"})
+		return
+	}
+	value, ok := s.permits.Load(in.QuoteID)
+	if !ok {
+		respondError(w, r, apperr.New("CHECKOUT_DECLINED", "Подтвердите проектный заказ через ОМА.Подбор", nil))
+		return
+	}
+	permit := value.(checkoutPermit)
+	if permit.ProjectID != in.ProjectID || permit.CartID != in.CartID || permit.TotalMinor != in.TotalMinor || permit.Currency != in.Currency || time.Now().After(permit.ExpiresAt) || permit.Hash != s.cfg.Soberi.ReviewHash(in.ProjectID) {
+		respondError(w, r, apperr.New("CHECKOUT_DECLINED", "Котировка изменилась", nil))
+		return
+	}
+	writeJSON(w, 200, map[string]any{"status": "authorized", "quote_id": in.QuoteID})
+
 }
 
 // POST /internal/v1/oma/events — входящие события магазина.
@@ -74,5 +87,14 @@ func (s *Server) handleOmaEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	accepted := s.cfg.Events.IngestExternal(in.EventID, in.Type, in.Aggregate, in.ID, projectID, in.Data)
+	if accepted && s.cfg.Save != nil {
+		go func() { s.mu.Lock(); defer s.mu.Unlock(); _ = s.cfg.Save() }()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"accepted": accepted, "event_id": in.EventID})
+}
+
+type checkoutPermit struct {
+	ProjectID, CartID, Currency, Hash string
+	TotalMinor                        int64
+	ExpiresAt                         time.Time
 }
